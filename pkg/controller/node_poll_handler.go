@@ -185,6 +185,9 @@ func (ctlr *Controller) processStaticRouteUpdate() {
 	if ctlr.multiClusterMode == SecondaryCIS && ctlr.RequestHandler.PrimaryClusterHealthProbeParams.statusRunning {
 		return
 	}
+	// Process the nodes networking for static route configuration in clusterIp and auto mode
+	if ctlr.StaticRoutingMode && ctlr.PoolMemberType != NodePort {
+		nodes := ctlr.getNodesFromAllClusters()
 		var addrType v1.NodeAddressType
 		if ctlr.UseNodeInternal {
 			addrType = v1.NodeInternalIP
