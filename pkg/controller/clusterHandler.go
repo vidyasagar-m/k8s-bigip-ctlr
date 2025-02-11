@@ -339,7 +339,7 @@ func (ch *ClusterHandler) UpdateResourceStatus(rscStatus ResourceStatus) {
 			if isStatusStandby {
 				vs.Status.Status = StatusStandby
 			} else {
-				vs.Status = rscStatus.ResourceObj.(cisv1.VirtualServerStatus)
+				vs.Status = rscStatus.ResourceObj.(cisv1.CustomResourceStatus)
 			}
 		}
 		_, updateErr = clusterConfig.kubeCRClient.CisV1().VirtualServers(vs.ObjectMeta.Namespace).UpdateStatus(context.TODO(), vs, metav1.UpdateOptions{})
@@ -381,15 +381,11 @@ func (ch *ClusterHandler) UpdateResourceStatus(rscStatus ResourceStatus) {
 			found = true
 		}
 		if found {
-<<<<<<< HEAD
 			if isStatusStandby {
 				ts.Status.Status = StatusStandby
 			} else {
-				ts.Status = rscStatus.ResourceObj.(cisv1.TransportServerStatus)
+				ts.Status = rscStatus.ResourceObj.(cisv1.CustomResourceStatus)
 			}
-=======
-			ts.Status = rscStatus.ResourceObj.(cisv1.CustomResourceStatus)
->>>>>>> c4846f11 (response handler for bigip next with throttling errors fix)
 		}
 		_, updateErr = clusterConfig.kubeCRClient.CisV1().TransportServers(ts.ObjectMeta.Namespace).UpdateStatus(context.TODO(), ts, metav1.UpdateOptions{})
 	case IngressLink:
@@ -430,15 +426,11 @@ func (ch *ClusterHandler) UpdateResourceStatus(rscStatus ResourceStatus) {
 			found = true
 		}
 		if found {
-<<<<<<< HEAD
 			if isStatusStandby {
 				il.Status.Status = StatusStandby
 			} else {
-				il.Status = rscStatus.ResourceObj.(cisv1.IngressLinkStatus)
+				il.Status = rscStatus.ResourceObj.(cisv1.CustomResourceStatus)
 			}
-=======
-			il.Status = rscStatus.ResourceObj.(cisv1.CustomResourceStatus)
->>>>>>> c4846f11 (response handler for bigip next with throttling errors fix)
 		}
 		_, updateErr = clusterConfig.kubeCRClient.CisV1().IngressLinks(il.ObjectMeta.Namespace).UpdateStatus(context.TODO(), il, metav1.UpdateOptions{})
 	case Service:
