@@ -73,10 +73,8 @@ func (ctlr *Controller) nextGenResourceWorker() {
 	}
 
 	// process static routes after extended configMap is processed, so as to support external cluster static routes during cis init
-	if ctlr.StaticRoutingMode {
-		clusterNodes := ctlr.getNodesFromAllClusters()
-		ctlr.processStaticRouteUpdate(clusterNodes)
-	}
+	ctlr.processStaticRouteUpdate()
+
 	for ctlr.processResources() {
 	}
 }
@@ -903,7 +901,7 @@ func (ctlr *Controller) processResources() bool {
 			// In non multi-cluster mode, we should post the teems data
 			go ctlr.TeemData.PostTeemsData()
 		}
-		config.reqId = ctlr.enqueueReq(config)
+		config.reqId = ctlr.enqueueReq(config, cisapiv1.BigIpConfig{})
 		config.poolMemberType = ctlr.PoolMemberType
 		if rKey.kind == HACIS {
 			log.Infof("[Request: %v] primary cluster down event requested %v", config.reqId, strings.ToTitle(Update))
@@ -5375,4 +5373,20 @@ func (ctlr *Controller) isAddingPoolRestricted(cluster string) bool {
 		return true
 	}
 	return false
+}
+
+func (ctlr *Controller) getBIGIPConfig(bigipLabel string) cisapiv1.BigIpConfig {
+	//get partition from bigip
+	for bigipconfig, _ := range ctlr.bigIpConfigMap {
+		//TODO: get bigipLabel from route resource or service address cr and get parition from specific bigip agent
+		//Phase1 getting partition from bigipconfig index 0
+		if bigipLabel == "" {
+			return bigipconfig
+		} else {
+			if bigipconfig.BigIpLabel == bigipLabel {
+				return bigipconfig
+			}
+		}
+	}
+	return cisapiv1.BigIpConfig{}
 }

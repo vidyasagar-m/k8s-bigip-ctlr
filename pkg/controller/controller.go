@@ -19,13 +19,14 @@ package controller
 import (
 	"context"
 	"fmt"
-	authv1 "k8s.io/api/authorization/v1"
-	"k8s.io/client-go/dynamic"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 	"unicode"
+
+	authv1 "k8s.io/api/authorization/v1"
+	"k8s.io/client-go/dynamic"
 
 	"github.com/F5Networks/k8s-bigip-ctlr/v2/pkg/vxlan"
 
@@ -145,6 +146,7 @@ func NewController(params Params, startController bool) *Controller {
 	ctlr := &Controller{
 		resources:                   NewResourceStore(),
 		Agent:                       params.Agent,
+		respChan:                    make(chan *agentConfig, 1),
 		PoolMemberType:              params.PoolMemberType,
 		UseNodeInternal:             params.UseNodeInternal,
 		Partition:                   params.Partition,
@@ -256,7 +258,7 @@ func NewController(params Params, startController bool) *Controller {
 	}
 
 	if startController {
-		go ctlr.responseHandler(ctlr.Agent.respChan)
+		go ctlr.responseHandler(ctlr.respChan)
 
 		go ctlr.Start()
 

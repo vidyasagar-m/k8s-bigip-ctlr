@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	bigIPPrometheus "github.com/F5Networks/k8s-bigip-ctlr/v2/pkg/prometheus"
-	log "github.com/F5Networks/k8s-bigip-ctlr/v2/pkg/vlogger"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"net"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
+
+	bigIPPrometheus "github.com/F5Networks/k8s-bigip-ctlr/v2/pkg/prometheus"
+	log "github.com/F5Networks/k8s-bigip-ctlr/v2/pkg/vlogger"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func (ctlr *Controller) SetupNodeProcessing(clusterName string) error {
@@ -35,14 +36,11 @@ func (ctlr *Controller) SetupNodeProcessing(clusterName string) error {
 	if ctlr.PoolMemberType == NodePort {
 		return nil
 	}
-	if ctlr.StaticRoutingMode {
-		if !ctlr.initState {
-			// external cluster config is not processed in init stage before local node informer state
-			// handle static routes update after external cluster config is processed
-			// So process nodes on updates after init state
-			clusterNodes := ctlr.getNodesFromAllClusters()
-			ctlr.processStaticRouteUpdate(clusterNodes)
-		}
+	if !ctlr.initState {
+		// external cluster config is not processed in init stage before local node informer state
+		// handle static routes update after external cluster config is processed
+		// So process nodes on updates after init state
+		ctlr.processStaticRouteUpdate()
 	} else if ctlr.vxlanMgr != nil {
 		// Register vxMgr to watch for node updates to process fdb records
 		ctlr.vxlanMgr.ProcessNodeUpdate(nodesList)
@@ -182,78 +180,94 @@ func ciliumPodCidr(annotation map[string]string) string {
 	return ""
 }
 
-func (ctlr *Controller) processStaticRouteUpdate(
-	nodes []interface{},
-) {
-	//if static-routing-mode process static routes
-	var addrType v1.NodeAddressType
-	if ctlr.UseNodeInternal {
-		addrType = v1.NodeInternalIP
-	} else {
-		addrType = v1.NodeExternalIP
+func (ctlr *Controller) processStaticRouteUpdate() {
+	// skip if CIS is running in secondary mode and primary cluster is running
+	if ctlr.multiClusterMode == SecondaryCIS && ctlr.RequestHandler.PrimaryClusterHealthProbeParams.statusRunning {
+		return
 	}
-	log.Debugf("Processing Node Updates for static routes")
-	routes := routeSection{}
-	routes.CISIdentifier = ctlr.Partition + "_" + strings.TrimPrefix(ctlr.Agent.PostManager.BIGIPURL, "https://")
-	nodePodCIDRMap := ctlr.GetNodePodCIDRMap()
-	for _, obj := range nodes {
-		node := obj.(*v1.Node)
-		// Ignore the Nodes with status NotReady
-		var notExecutable bool
-		for _, nodeCondition := range node.Status.Conditions {
-			if nodeCondition.Type == v1.NodeReady && nodeCondition.Status != v1.ConditionTrue {
-				notExecutable = true
-				break
-			}
+		var addrType v1.NodeAddressType
+		if ctlr.UseNodeInternal {
+			addrType = v1.NodeInternalIP
+		} else {
+			addrType = v1.NodeExternalIP
 		}
-		if notExecutable == true {
-			continue
-		}
-		route := routeConfig{}
-		route.Description = routes.CISIdentifier
-		// For ovn-k8s get pod subnet and node ip from annotation
-		if ctlr.OrchestrationCNI == OVN_K8S {
-			annotations := node.Annotations
-			if nodeSubnetAnn, ok := annotations[OVNK8sNodeSubnetAnnotation]; !ok {
-				log.Warningf("Node subnet annotation %v not found on node %v static route not added", OVNK8sNodeSubnetAnnotation, node.Name)
-				continue
-			} else {
-				nodesubnet, err := parseNodeSubnet(nodeSubnetAnn, node.Name)
-				if err != nil {
-					log.Warningf("Node subnet annotation %v not properly configured for node %v:%v", OVNK8sNodeSubnetAnnotation, node.Name, err)
-					continue
+		log.Debugf("Processing Node Updates for static routes")
+		routes := routeSection{}
+		routes.CISIdentifier = ctlr.Partition + "_" + strings.TrimPrefix(ctlr.Agent.PostManager.BIGIPURL, "https://")
+		nodePodCIDRMap := ctlr.GetNodePodCIDRMap()
+		for _, obj := range nodes {
+			node := obj.(*v1.Node)
+			// Ignore the Nodes with status NotReady
+			var notExecutable bool
+			for _, nodeCondition := range node.Status.Conditions {
+				if nodeCondition.Type == v1.NodeReady && nodeCondition.Status != v1.ConditionTrue {
+					notExecutable = true
+					break
 				}
-				route.Network = nodesubnet
 			}
-			if ctlr.StaticRouteNodeCIDR != "" {
-				_, nodenetwork, err := net.ParseCIDR(ctlr.StaticRouteNodeCIDR)
-				if err != nil {
-					log.Errorf("Unable to parse cidr %v with error %v", ctlr.StaticRouteNodeCIDR, err)
+			if notExecutable == true {
+				continue
+			}
+			route := routeConfig{}
+			route.Description = routes.CISIdentifier
+			// For ovn-k8s get pod subnet and node ip from annotation
+			if ctlr.OrchestrationCNI == OVN_K8S {
+				annotations := node.Annotations
+				if nodeSubnetAnn, ok := annotations[OVNK8sNodeSubnetAnnotation]; !ok {
+					log.Warningf("Node subnet annotation %v not found on node %v static route not added", OVNK8sNodeSubnetAnnotation, node.Name)
 					continue
 				} else {
-					var hostaddresses string
-					var ok bool
-					var nodeIP string
-					var err error
-					if hostaddresses, ok = annotations[OVNK8sNodeIPAnnotation2]; !ok {
-						//For ocp 4.14 and above check for new annotation
-						if hostaddresses, ok = annotations[OvnK8sNodeIPAnnotation3]; !ok {
-							log.Warningf("Host addresses annotation %v not found on node %v static route not added", OVNK8sNodeIPAnnotation2, node.Name)
-							continue
+					nodesubnet, err := parseNodeSubnet(nodeSubnetAnn, node.Name)
+					if err != nil {
+						log.Warningf("Node subnet annotation %v not properly configured for node %v:%v", OVNK8sNodeSubnetAnnotation, node.Name, err)
+						continue
+					}
+					route.Network = nodesubnet
+				}
+				if ctlr.StaticRouteNodeCIDR != "" {
+					_, nodenetwork, err := net.ParseCIDR(ctlr.StaticRouteNodeCIDR)
+					if err != nil {
+						log.Errorf("Unable to parse cidr %v with error %v", ctlr.StaticRouteNodeCIDR, err)
+						continue
+					} else {
+						var hostaddresses string
+						var ok bool
+						var nodeIP string
+						var err error
+						if hostaddresses, ok = annotations[OVNK8sNodeIPAnnotation2]; !ok {
+							//For ocp 4.14 and above check for new annotation
+							if hostaddresses, ok = annotations[OvnK8sNodeIPAnnotation3]; !ok {
+								log.Warningf("Host addresses annotation %v not found on node %v static route not added", OVNK8sNodeIPAnnotation2, node.Name)
+								continue
+							} else {
+								nodeIP, err = parseHostCIDRS(hostaddresses, nodenetwork)
+								if err != nil {
+									log.Warningf("Node IP annotation %v not properly configured for node %v:%v", OvnK8sNodeIPAnnotation3, node.Name, err)
+									continue
+								}
+								route.Gateway = nodeIP
+								route.Name = fmt.Sprintf("k8s-%v-%v", node.Name, nodeIP)
+								routes.Entries = append(routes.Entries, route)
+							}
 						} else {
-							nodeIP, err = parseHostCIDRS(hostaddresses, nodenetwork)
+							nodeIP, err = parseHostAddresses(hostaddresses, nodenetwork)
 							if err != nil {
-								log.Warningf("Node IP annotation %v not properly configured for node %v:%v", OvnK8sNodeIPAnnotation3, node.Name, err)
+								log.Warningf("Node IP annotation %v not properly configured for node %v:%v", OVNK8sNodeIPAnnotation2, node.Name, err)
 								continue
 							}
 							route.Gateway = nodeIP
 							route.Name = fmt.Sprintf("k8s-%v-%v", node.Name, nodeIP)
 							routes.Entries = append(routes.Entries, route)
 						}
+					}
+				} else {
+					if nodeIPAnn, ok := annotations[OVNK8sNodeIPAnnotation]; !ok {
+						log.Warningf("Node IP annotation %v not found on node %v static route not added", OVNK8sNodeSubnetAnnotation, node.Name)
+						continue
 					} else {
-						nodeIP, err = parseHostAddresses(hostaddresses, nodenetwork)
+						nodeIP, err := parseNodeIP(nodeIPAnn, node.Name)
 						if err != nil {
-							log.Warningf("Node IP annotation %v not properly configured for node %v:%v", OVNK8sNodeIPAnnotation2, node.Name, err)
+							log.Warningf("Node IP annotation %v not properly configured for node %v:%v", OVNK8sNodeIPAnnotation, node.Name, err)
 							continue
 						}
 						route.Gateway = nodeIP
@@ -261,93 +275,79 @@ func (ctlr *Controller) processStaticRouteUpdate(
 						routes.Entries = append(routes.Entries, route)
 					}
 				}
-			} else {
-				if nodeIPAnn, ok := annotations[OVNK8sNodeIPAnnotation]; !ok {
-					log.Warningf("Node IP annotation %v not found on node %v static route not added", OVNK8sNodeSubnetAnnotation, node.Name)
+			} else if ctlr.OrchestrationCNI == CILIUM_K8S {
+				nodesubnet := ciliumPodCidr(node.ObjectMeta.Annotations)
+				if nodesubnet == "" {
+					log.Warningf("Cilium node podCIDR annotation not found on node %v, node has spec.podCIDR ?", node.Name)
 					continue
 				} else {
-					nodeIP, err := parseNodeIP(nodeIPAnn, node.Name)
-					if err != nil {
-						log.Warningf("Node IP annotation %v not properly configured for node %v:%v", OVNK8sNodeIPAnnotation, node.Name, err)
+					route.Network = nodesubnet
+					nodeAddrs := node.Status.Addresses
+					for _, addr := range nodeAddrs {
+						if addr.Type == addrType {
+							route.Gateway = addr.Address
+							route.Name = fmt.Sprintf("k8s-%v-%v", node.Name, addr.Address)
+							routes.Entries = append(routes.Entries, route)
+						}
+					}
+
+				}
+			} else if ctlr.OrchestrationCNI == CALICO_K8S {
+				if nodePodCIDRMap != nil && len(nodePodCIDRMap) > 0 {
+					if len(nodePodCIDRMap) != len(nodes) {
+						//Wait for some time to get the nodePodCIDRMap in case a new node is added, it takes some time to create the block affinity for node
+						time.Sleep(1 * time.Second)
+						nodePodCIDRMap = ctlr.GetNodePodCIDRMap()
+					}
+					if nodeIPValue, ok := node.Annotations[CALICONodeIPAnnotation]; ok {
+						for _, bacidr := range nodePodCIDRMap {
+							if bacidr.nodeName == node.Name {
+								route.Gateway = strings.Split(nodeIPValue, "/")[0]
+								route.Name = fmt.Sprintf("k8s-%v", bacidr.baName)
+								route.Network = bacidr.cidr
+								routes.Entries = append(routes.Entries, route)
+							} else {
+								log.Warningf("Pod Network not found for node %v, static route not added", node.Name)
+								continue
+							}
+						}
+					} else {
+						log.Warningf("Host addresses annotation %v not found on node %v ,static route not added", CALICONodeIPAnnotation, node.Name)
 						continue
 					}
-					route.Gateway = nodeIP
-					route.Name = fmt.Sprintf("k8s-%v-%v", node.Name, nodeIP)
-					routes.Entries = append(routes.Entries, route)
 				}
-			}
-		} else if ctlr.OrchestrationCNI == CILIUM_K8S {
-			nodesubnet := ciliumPodCidr(node.ObjectMeta.Annotations)
-			if nodesubnet == "" {
-				log.Warningf("Cilium node podCIDR annotation not found on node %v, node has spec.podCIDR ?", node.Name)
-				continue
 			} else {
-				route.Network = nodesubnet
-				nodeAddrs := node.Status.Addresses
-				for _, addr := range nodeAddrs {
-					if addr.Type == addrType {
-						route.Gateway = addr.Address
-						route.Name = fmt.Sprintf("k8s-%v-%v", node.Name, addr.Address)
-						routes.Entries = append(routes.Entries, route)
-					}
-				}
-
-			}
-		} else if ctlr.OrchestrationCNI == CALICO_K8S {
-			if nodePodCIDRMap != nil && len(nodePodCIDRMap) > 0 {
-				if len(nodePodCIDRMap) != len(nodes) {
-					//Wait for some time to get the nodePodCIDRMap in case a new node is added, it takes some time to create the block affinity for node
-					time.Sleep(1 * time.Second)
-					nodePodCIDRMap = ctlr.GetNodePodCIDRMap()
-				}
-				if nodeIPValue, ok := node.Annotations[CALICONodeIPAnnotation]; ok {
-					for _, bacidr := range nodePodCIDRMap {
-						if bacidr.nodeName == node.Name {
-							route.Gateway = strings.Split(nodeIPValue, "/")[0]
-							route.Name = fmt.Sprintf("k8s-%v", bacidr.baName)
-							route.Network = bacidr.cidr
+				//For k8s CNI like flannel, antrea etc we can get subnet from node spec
+				podCIDR := node.Spec.PodCIDR
+				if podCIDR != "" {
+					route.Network = podCIDR
+					nodeAddrs := node.Status.Addresses
+					for _, addr := range nodeAddrs {
+						if addr.Type == addrType {
+							route.Gateway = addr.Address
+							route.Name = fmt.Sprintf("k8s-%v-%v", node.Name, addr.Address)
 							routes.Entries = append(routes.Entries, route)
-						} else {
-							log.Warningf("Pod Network not found for node %v, static route not added", node.Name)
-							continue
 						}
 					}
 				} else {
-					log.Warningf("Host addresses annotation %v not found on node %v ,static route not added", CALICONodeIPAnnotation, node.Name)
+					log.Debugf("podCIDR is not found on node %v so not adding the static route for node", node.Name)
 					continue
 				}
 			}
-		} else {
-			//For k8s CNI like flannel, antrea etc we can get subnet from node spec
-			podCIDR := node.Spec.PodCIDR
-			if podCIDR != "" {
-				route.Network = podCIDR
-				nodeAddrs := node.Status.Addresses
-				for _, addr := range nodeAddrs {
-					if addr.Type == addrType {
-						route.Gateway = addr.Address
-						route.Name = fmt.Sprintf("k8s-%v-%v", node.Name, addr.Address)
-						routes.Entries = append(routes.Entries, route)
-					}
-				}
-			} else {
-				log.Debugf("podCIDR is not found on node %v so not adding the static route for node", node.Name)
-				continue
-			}
 		}
-	}
-	doneCh, errCh, err := ctlr.Agent.ConfigWriter.SendSection("static-routes", routes)
+		doneCh, errCh, err := ctlr.Agent.ConfigWriter.SendSection("static-routes", routes)
 
-	if nil != err {
-		log.Warningf("Failed to write static routes config section: %v", err)
-	} else {
-		select {
-		case <-doneCh:
-			log.Debugf("Wrote static route config section: %v", routes)
-		case e := <-errCh:
-			log.Warningf("Failed to write static route config section: %v", e)
-		case <-time.After(time.Second):
-			log.Warningf("Did not receive write response in 1s")
+		if nil != err {
+			log.Warningf("Failed to write static routes config section: %v", err)
+		} else {
+			select {
+			case <-doneCh:
+				log.Debugf("Wrote static route config section: %v", routes)
+			case e := <-errCh:
+				log.Warningf("Failed to write static route config section: %v", e)
+			case <-time.After(time.Second):
+				log.Warningf("Did not receive write response in 1s")
+			}
 		}
 	}
 }

@@ -881,7 +881,7 @@ func (ctlr *Controller) enqueueUpdatedVirtualServer(oldObj, newObj interface{}) 
 
 		// delete vs from previous partition on priority when partition is changed
 		if oldVSPartition != newVSPartition {
-			ctlr.resources.updatePartitionPriority(oldVSPartition, 1)
+			ctlr.resources.updatePartitionPriority(oldVSPartition, 1, cisapiv1.BigIpConfig{})
 		}
 
 		key := &rqKey{
@@ -976,7 +976,7 @@ func (ctlr *Controller) enqueueUpdatedTransportServer(oldObj, newObj interface{}
 
 		// delete vs from previous partition on priority when partition is changed
 		if oldVSPartition != newVSPartition {
-			ctlr.resources.updatePartitionPriority(oldVSPartition, 1)
+			ctlr.resources.updatePartitionPriority(oldVSPartition, 1, cisapiv1.BigIpConfig{})
 		}
 
 		key := &rqKey{
@@ -1097,7 +1097,7 @@ func (ctlr *Controller) enqueueUpdatedIngressLink(oldObj, newObj interface{}) {
 
 		// delete vs from previous partition on priority when partition is changed
 		if oldILPartition != newILPartition {
-			ctlr.resources.updatePartitionPriority(oldILPartition, 1)
+			ctlr.resources.updatePartitionPriority(oldILPartition, 1, cisapiv1.BigIpConfig{})
 		}
 
 		key := &rqKey{

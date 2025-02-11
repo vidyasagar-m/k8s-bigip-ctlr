@@ -275,6 +275,12 @@ type IngressLinkSpec struct {
 	Partition            string                `json:"partition,omitempty"`
 }
 
+type BigIpConfig struct {
+	BigIpAddress     string `json:"bigIpAddress,omitempty"`
+	BigIpLabel       string `json:"bigIpLabel,omitempty"`
+	DefaultPartition string `json:"defaultPartition,omitempty"`
+}
+
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // IngressLinkList is list of IngressLink

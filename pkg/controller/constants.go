@@ -25,6 +25,8 @@ const (
 
 	defaultRouteGroupName string = "defaultRouteGroup"
 
+	BigIPLabel = ""
+
 	//OVN K8S CNI
 	OVN_K8S                    = "ovn-k8s"
 	OVNK8sNodeSubnetAnnotation = "k8s.ovn.org/node-subnets"

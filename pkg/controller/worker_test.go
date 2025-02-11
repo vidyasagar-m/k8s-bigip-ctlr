@@ -2019,7 +2019,7 @@ var _ = Describe("Worker Tests", func() {
 				go mockCtlr.Agent.agentWorker()
 				go mockCtlr.Agent.retryWorker()
 
-				go mockCtlr.responseHandler(mockCtlr.Agent.respChan)
+				go mockCtlr.responseHandler(mockCtlr.respChan)
 				httpMrfRouterEnabled := true
 				httpMrfRouterDisabled := false
 				policy.Spec.Profiles.HttpMrfRoutingEnabled = &httpMrfRouterEnabled
@@ -2221,7 +2221,7 @@ var _ = Describe("Worker Tests", func() {
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(2), "Invalid Partition count")
 				// Simulating partition priority update to zero by response handler on successfully posting the priority
 				// tenant update
-				mockCtlr.resources.updatePartitionPriority("dev3", 0)
+				mockCtlr.resources.updatePartitionPriority("dev3", 0, cisapiv1.BigIpConfig{})
 				mockCtlr.processResources()
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(1), "Invalid Partition count")
 				Expect(len(mockCtlr.resources.ltmConfig["dev"].ResourceMap)).To(Equal(2), "Invalid VS count")
@@ -2245,7 +2245,7 @@ var _ = Describe("Worker Tests", func() {
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(2), "Invalid Partition count")
 				// Simulating partition priority update to zero by response handler on successfully posting the priority
 				// tenant update
-				mockCtlr.resources.updatePartitionPriority("dev", 0)
+				mockCtlr.resources.updatePartitionPriority("dev", 0, cisapiv1.BigIpConfig{})
 				mockCtlr.processResources()
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(1), "Invalid Partition count")
 				Expect(len(mockCtlr.resources.ltmConfig[mockCtlr.Partition].ResourceMap)).To(Equal(2), "Invalid VS count")
@@ -2364,7 +2364,7 @@ var _ = Describe("Worker Tests", func() {
 				go mockCtlr.Agent.agentWorker()
 				go mockCtlr.Agent.retryWorker()
 				_ = mockCtlr.Agent.respChan
-				go mockCtlr.responseHandler(mockCtlr.Agent.respChan)
+				go mockCtlr.responseHandler(mockCtlr.respChan)
 
 				mockCtlr.addEndpoints(fooEndpts)
 				mockCtlr.processResources()
@@ -2609,7 +2609,7 @@ var _ = Describe("Worker Tests", func() {
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(3), "Invalid Partition count")
 				// Simulating partition priority update to zero by response handler on successfully posting the priority
 				// tenant update
-				mockCtlr.resources.updatePartitionPriority("dev3", 0)
+				mockCtlr.resources.updatePartitionPriority("dev3", 0, cisapiv1.BigIpConfig{})
 				mockCtlr.processResources()
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(2), "Invalid Partition count")
 				Expect(len(mockCtlr.resources.ltmConfig["dev"].ResourceMap)).To(Equal(1), "Invalid TS count")
@@ -2638,7 +2638,7 @@ var _ = Describe("Worker Tests", func() {
 				mockCtlr.processResources()
 				// Simulating partition priority update to zero by response handler on successfully posting the priority
 				// tenant update
-				mockCtlr.resources.updatePartitionPriority("dev", 0)
+				mockCtlr.resources.updatePartitionPriority("dev", 0, cisapiv1.BigIpConfig{})
 				mockCtlr.processResources()
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(2), "Invalid Partition count")
 				Expect(len(mockCtlr.resources.ltmConfig[mockCtlr.Partition].ResourceMap)).To(Equal(2), "Invalid TS count")
@@ -2951,7 +2951,7 @@ var _ = Describe("Worker Tests", func() {
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(2), "Invalid Partition count")
 				// Simulating partition priority update to zero by response handler on successfully posting the priority
 				// tenant update
-				mockCtlr.resources.updatePartitionPriority("dev1", 0)
+				mockCtlr.resources.updatePartitionPriority("dev1", 0, cisapiv1.BigIpConfig{})
 				mockCtlr.processResources()
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(1), "Invalid Partition count")
 				Expect(len(mockCtlr.resources.ltmConfig["dev"].ResourceMap)).To(Equal(2), "Invalid IL count")
@@ -2972,7 +2972,7 @@ var _ = Describe("Worker Tests", func() {
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(2), "Invalid Partition count")
 				// Simulating partition priority update to zero by response handler on successfully posting the priority
 				// tenant update
-				mockCtlr.resources.updatePartitionPriority("dev", 0)
+				mockCtlr.resources.updatePartitionPriority("dev", 0, cisapiv1.BigIpConfig{})
 				mockCtlr.processResources()
 				Expect(len(mockCtlr.resources.ltmConfig)).To(Equal(1), "Invalid Partition count")
 				Expect(len(mockCtlr.resources.ltmConfig[mockCtlr.Partition].ResourceMap)).To(Equal(2), "Invalid IL count")

@@ -1863,11 +1863,11 @@ func (rs *ResourceStore) deleteVirtualServer(partition, rsName string) {
 }
 
 // Update the tenant priority in ltmConfigCache
-func (rs *ResourceStore) updatePartitionPriority(partition string, priority int) {
-	if _, ok := rs.ltmConfig[partition]; ok {
-		rs.ltmConfig[partition].PriorityMutex.Lock()
-		*rs.ltmConfig[partition].Priority = priority
-		rs.ltmConfig[partition].PriorityMutex.Unlock()
+func (rs *ResourceStore) updatePartitionPriority(partition string, priority int, bigip cisapiv1.BigIpConfig) {
+	if _, ok := rs.bigIpMap[bigip].ltmConfig[partition]; ok {
+		rs.bigIpMap[bigip].ltmConfig[partition].PriorityMutex.Lock()
+		*rs.bigIpMap[bigip].ltmConfig[partition].Priority = priority
+		rs.bigIpMap[bigip].ltmConfig[partition].PriorityMutex.Unlock()
 	}
 }
 

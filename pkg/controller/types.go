@@ -18,12 +18,14 @@ package controller
 
 import (
 	"container/list"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/informers"
 	"net/http"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/informers"
+
+	"github.com/F5Networks/F5Networks-k8s-bigip-ctlr/k8s-bigip-ctlr/pkg/ipmanager"
 	cisapiv1 "github.com/F5Networks/k8s-bigip-ctlr/v2/config/apis/cis/v1"
 	"github.com/F5Networks/k8s-bigip-ctlr/v2/pkg/vxlan"
 
@@ -62,6 +64,11 @@ type (
 		resourceQueue               workqueue.RateLimitingInterface
 		Partition                   string
 		Agent                       *Agent
+		requestMap                  *requestMap
+		RequestHandler              *RequestHandler
+		respChan                    chan *agentConfig
+		ipamHandler                 *ipmanager.IPAMHandler
+		bigIpConfigMap              BigIpConfigMap
 		PoolMemberType              string
 		UseNodeInternal             bool
 		initState                   bool
@@ -96,6 +103,63 @@ type (
 		namespaceLabelMode  bool
 		processedHostPath   *ProcessedHostPath
 	}
+
+	// TODO: Needs to be updated with request handler implementation
+	RequestHandler struct {
+		AgentWorker                     map[cisapiv1.BigIpConfig]*AgentWorker
+		reqChan                         chan ResourceConfigRequest
+		userAgent                       string
+		PostParams                      PostParams
+		respChan                        chan *agentConfig
+		HAMode                          bool
+		PrimaryClusterHealthProbeParams PrimaryClusterHealthProbeParams
+		httpClientMetrics               bool
+	}
+	AgentWorker struct {
+		PostManager PostManager
+		PostChan    chan AgentConfig
+		sync.RWMutex
+	}
+	requestMap struct {
+		sync.RWMutex
+		requestMap map[cisapiv1.BigIpConfig]requestMeta
+	}
+
+	// BigIpConfigMap Where key is the BigIP structure and value is the bigip-next configuration
+	BigIpConfigMap map[cisapiv1.BigIpConfig]BigIpResourceConfig
+
+	// BigIP struct to hold the bigip address and label for HA pairs
+	BIGIPConfigs []cisapiv1.BigIpConfig
+
+	//agentConfig holds as3config and l3config to put onto post channel
+	agentConfig struct {
+		as3Config   as3Config
+		l3Config    l3Config
+		BigIpConfig cisapiv1.BigIpConfig
+		reqMeta     requestMeta
+		data        string
+		as3APIURL   string
+		id          int
+		AgentConfig
+	}
+
+	// //as3Config to put into post channel
+	// as3Config struct {
+	// 	data                  string
+	// 	targetAddress         string
+	// 	as3APIURL             string
+	// 	id                    int
+	// 	tenantResponseMap     map[string]tenantResponse
+	// 	acceptedTaskId        string
+	// 	failedTenants         map[string]struct{}
+	// 	incomingTenantDeclMap map[string]as3Tenant
+	// 	deleted               bool
+	// }
+
+	//TODO L3Config to put into post channel. Handle with L3Postmanager implementation
+	// l3Config struct {
+	// 	deployL3Status bool
+	// }
 
 	InformerStore struct {
 		comInformers     map[string]*CommonInformer
@@ -399,6 +463,8 @@ type (
 		gtmConfig      GTMConfig
 		gtmConfigCache GTMConfig
 		nplStore       NPLStore
+		bigIpMap       BigIpConfigMap
+		bigIpMapCache  BigIpConfigMap
 		supplementContextCache
 	}
 
@@ -932,10 +998,16 @@ type (
 		tenantResponse
 	}
 
-	agentConfig struct {
-		data      string
-		as3APIURL string
-		id        int
+	// agentConfig struct {
+	// 	data      string
+	// 	as3APIURL string
+	// 	id        int
+	// }
+
+	BigIpResourceConfig struct {
+		ltmConfig  LTMConfig
+		gtmConfig  GTMConfig
+		shareNodes bool
 	}
 
 	globalSection struct {
@@ -1557,4 +1629,63 @@ var (
 		Version:  "v1",
 		Resource: "blockaffinities",
 	}
+)
+
+type (
+	ConfigType string
+
+	AgentConfig interface {
+		getConfigType() ConfigType // AS3, CCCL, etc
+		getConfig() interface{}
+		getRequestMeta() requestMeta
+		getAPIURL() string
+		getTargetAddress() string
+		getTenantResponseMap() map[string]tenantResponse
+		getAcceptedTaskId() string
+		getFailedTenants() map[string]struct{}
+		getIncomingTenantConfigMap() interface{} // For AS3 map[string]as3Tenant
+		getIsDeleted() bool
+		getBigIPConfig() cisapiv1.BigIpConfig
+		getL3Config() l3Config
+		setConfigType(ConfigType)
+		setConfig(interface{})
+		setRequestMeta(int)
+		setAPIURL(string)
+		setTargetAddress(string)
+		setTenantResponseMap(map[string]tenantResponse)
+		setAcceptedTaskId(string)
+		setFailedTenants(map[string]struct{})
+		setIncomingTenantConfigMap(interface{}) // For AS3 map[string]as3Tenant
+		setIsDeleted(bool)
+		setBigIPConfig(cisapiv1.BigIpConfig)
+		setL3Config(l3Config)
+	}
+
+	AS3AgentConfig struct {
+		as3Config   as3Config
+		l3Config    l3Config
+		BigIpConfig cisapiv1.BigIpConfig
+		reqMeta     requestMeta
+	}
+
+	l3Config struct {
+		deployL3Status bool
+	}
+
+	//as3Config to put into post channel
+	as3Config struct {
+		data                  string
+		targetAddress         string
+		as3APIURL             string
+		id                    int
+		tenantResponseMap     map[string]tenantResponse
+		acceptedTaskId        string
+		failedTenants         map[string]struct{}
+		incomingTenantDeclMap map[string]as3Tenant
+		deleted               bool
+	}
+)
+
+const (
+	AS3 ConfigType = "AS3"
 )
